@@ -2,3 +2,36 @@
 @import './styles/variables.css';
 @import './styles/base.css';
 @import './styles/components.css';
+
+/* Estilos globales para toasts */
+.toast-container {
+  font-family: var(--font-family, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+}
+
+/* Asegurar que los toasts estén por encima de todo */
+.toast-container {
+  z-index: 9999 !important;
+}
+
+/* Animaciones globales para toasts */
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}

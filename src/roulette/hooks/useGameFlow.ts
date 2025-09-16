@@ -4,6 +4,7 @@ import { GameUseCase } from '../application/game.usecase';
 import { GameEntity } from '../domain/entities/game.entity';
 import type { BetType } from '../domain/entities/roulette.entity';
 import { RouletteContainer, ROULETTE_TYPES } from '../infrastructure/container/inversify.conf';
+import { useToast } from '../../shared/composables/useToast';
 
 /**
  * Composable de Vue para manejar el flujo del juego de ruleta
@@ -14,6 +15,9 @@ export function useGameFlow() {
   
   // Obtener dependencies del contenedor de Inversify
   const gameUseCase = RouletteContainer.get<GameUseCase>(ROULETTE_TYPES.GameUseCase);
+
+  // Hook de toast para notificaciones adicionales
+  const { success, error: showError } = useToast();
 
   // Estado local del composable
   const isInitializing = ref(false);
@@ -49,9 +53,15 @@ export function useGameFlow() {
       
       store.setCurrentPlayer(player);
       store.setCurrentGame(game);
+      
+      // Toast de éxito para nuevo jugador
+      success(`¡Bienvenido ${name}! Tu saldo inicial es $${initialBalance}`, { title: 'Jugador Creado' });
     } catch (error) {
       const errorMessage = (error as Error).message;
       store.setError(errorMessage);
+      
+      // Toast de error
+      showError(`Error al crear jugador: ${errorMessage}`, { title: 'Error' });
     } finally {
       isInitializing.value = false;
       store.setLoading(false);
@@ -82,9 +92,15 @@ export function useGameFlow() {
       
       store.setCurrentPlayer(player);
       store.setCurrentGame(game);
+      
+      // Toast de éxito para jugador cargado
+      success(`¡Bienvenido de vuelta ${name}! Tu saldo actual es $${player.balance}`, { title: 'Jugador Cargado' });
     } catch (error) {
       const errorMessage = (error as Error).message;
       store.setError(errorMessage);
+      
+      // Toast de error
+      showError(`Error al cargar jugador: ${errorMessage}`, { title: 'Error' });
     } finally {
       isInitializing.value = false;
       store.setLoading(false);
@@ -106,8 +122,11 @@ export function useGameFlow() {
       await gameUseCase.placeBet(store.currentGame as GameEntity, betType, betValue, betAmount);
       
       // Actualizar el balance en el store después de la apuesta
-      if (store.currentPlayer && store.currentUser) {
-        store.updateUserBalance(store.currentPlayer.balance);
+      // Usar el balance del GameEntity que ya fue actualizado por el GameUseCase
+      if (store.currentGame && store.currentGame.player) {
+        const updatedBalance = store.currentGame.player.balance;
+        console.log('Actualizando balance después de apuesta:', updatedBalance);
+        store.forceUpdatePlayerBalance(updatedBalance);
       }
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -133,19 +152,31 @@ export function useGameFlow() {
       const result = await gameUseCase.spinRoulette(store.currentGame as GameEntity);
       
       // Actualizar el balance en el store después del giro
-      if (store.currentPlayer && store.currentUser) {
-        store.updateUserBalance(store.currentPlayer.balance);
+      // Usar el balance del GameEntity que ya fue actualizado por el GameUseCase
+      if (store.currentGame && store.currentGame.player) {
+        const updatedBalance = store.currentGame.player.balance;
+        console.log('Actualizando balance después del giro:', updatedBalance);
+        store.forceUpdatePlayerBalance(updatedBalance);
       }
       
       // Crear un resultado de apuesta para compatibilidad con el store
       if (result.isCompleted && result.winningNumber !== undefined) {
+        // Mapear colores del español (backend) al inglés (frontend)
+        const colorMapping: { [key: string]: string } = {
+          'ROJO': 'red',
+          'NEGRO': 'black',
+          'VERDE': 'green'
+        };
+        
+        const mappedColor = colorMapping[result.winningColor || ''] || 'green';
+        
         const betResult = {
           won: false, // Se calculará basado en las apuestas
           winnings: 0, // Se calculará basado en las apuestas
           profit: 0, // Se calculará basado en las apuestas
           multiplier: 0, // Se calculará basado en las apuestas
           resultNumber: result.winningNumber,
-          resultColor: (result.winningColor as 'red' | 'black' | 'green') || 'green',
+          resultColor: (mappedColor as 'red' | 'black' | 'green'),
           isResultEven: result.winningNumber % 2 === 0,
           isResultOdd: result.winningNumber % 2 === 1
         };
@@ -173,9 +204,15 @@ export function useGameFlow() {
       }
 
       await gameUseCase.savePlayer(store.currentPlayer);
+      
+      // No mostrar notificación aquí para evitar duplicados
+      // La notificación se maneja en GameUseCase.saveGameViaApi
     } catch (error) {
       const errorMessage = (error as Error).message;
       store.setError(errorMessage);
+      
+      // Solo mostrar error si no se manejó en el use case
+      showError(`Error al guardar partida: ${errorMessage}`, { title: 'Error' });
     } finally {
       store.setLoading(false);
     }
@@ -352,6 +389,32 @@ export function useGameFlow() {
     }
   };
 
+  /**
+   * Sincroniza el balance del jugador con el backend
+   */
+  const syncBalance = async () => {
+    if (!store.currentPlayer) {
+      showError('No hay jugador activo para sincronizar', { title: 'Error' });
+      return;
+    }
+
+    try {
+      store.setLoading(true);
+      store.clearError();
+      
+      const backendBalance = await gameUseCase.syncPlayerBalanceWithBackend(store.currentPlayer);
+      store.forceUpdatePlayerBalance(backendBalance);
+      
+      success(`Balance sincronizado: $${backendBalance}`, { title: 'Sincronización Exitosa' });
+    } catch (error) {
+      const errorMessage = (error as Error).message;
+      store.setError(errorMessage);
+      showError(`Error al sincronizar balance: ${errorMessage}`, { title: 'Error' });
+    } finally {
+      store.setLoading(false);
+    }
+  };
+
   return {
     // Estado
     isInitializing,
@@ -383,6 +446,9 @@ export function useGameFlow() {
     // Acciones de autenticación
     initializeAuth,
     checkExistingSession,
-    logout
+    logout,
+    
+    // Acciones de sincronización
+    syncBalance
   };
 }

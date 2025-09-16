@@ -4,7 +4,6 @@ import type { UserRepository } from '../../domain/repositories/user.repository';
 import type { AuthSessionRepository } from '../../domain/repositories/auth-session.repository';
 import { UserEntity } from '../../domain/entities/user.entity';
 import { AuthSessionEntity } from '../../domain/entities/auth-session.entity';
-import { CredentialsEntity } from '../../domain/entities/credentials.entity';
 import { HttpService } from '../../../shared/infrastructure/services/http.service';
 import { IAM_TYPES } from '../container/types';
 
@@ -26,11 +25,11 @@ export class ApiAuthService extends HttpService implements AuthService {
   /**
    * Registra un nuevo usuario en el backend
    */
-  async register(credentials: CredentialsEntity, username: string): Promise<UserEntity> {
+  async register(name: string, balance: number): Promise<UserEntity> {
     try {
       const registerData = {
-        name: username, // Usar username como name
-        balance: 100 // Balance inicial por defecto
+        name: name,
+        balance: balance
       };
 
       const response = await this.post<{
@@ -65,10 +64,10 @@ export class ApiAuthService extends HttpService implements AuthService {
   /**
    * Autentica un usuario con el backend usando solo el nombre
    */
-  async login(credentials: CredentialsEntity): Promise<AuthSessionEntity> {
+  async login(name: string): Promise<{ user: UserEntity; session: AuthSessionEntity }> {
     try {
       const loginData = {
-        name: credentials.email // Usamos email como name para mantener compatibilidad
+        name: name
       };
 
       const response = await this.post<{
@@ -94,10 +93,16 @@ export class ApiAuthService extends HttpService implements AuthService {
         response.session.isActive
       );
 
+      // Obtener el usuario por UID
+      const user = await this.userRepository.findById(response.session.userId);
+      if (!user) {
+        throw new Error('Usuario no encontrado después del login');
+      }
+
       // Guardamos la sesión en el repositorio local si es necesario
       await this.authSessionRepository.save(session);
 
-      return session;
+      return { user, session };
     } catch (error) {
       throw new Error(`Error en el login: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     }
@@ -191,47 +196,4 @@ export class ApiAuthService extends HttpService implements AuthService {
     }
   }
 
-  /**
-   * Cambia la contraseña en el backend
-   */
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
-    try {
-      const changePasswordData = {
-        userId,
-        currentPassword,
-        newPassword
-      };
-
-      await this.post(`${this.API_BASE}/change-password`, changePasswordData);
-    } catch (error) {
-      throw new Error(`Error al cambiar contraseña: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-    }
-  }
-
-  /**
-   * Solicita restablecimiento de contraseña en el backend
-   */
-  async requestPasswordReset(email: string): Promise<void> {
-    try {
-      await this.post(`${this.API_BASE}/request-password-reset`, { email });
-    } catch (error) {
-      throw new Error(`Error al solicitar restablecimiento: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-    }
-  }
-
-  /**
-   * Restablece la contraseña con un token en el backend
-   */
-  async resetPassword(token: string, newPassword: string): Promise<void> {
-    try {
-      const resetData = {
-        token,
-        newPassword
-      };
-
-      await this.post(`${this.API_BASE}/reset-password`, resetData);
-    } catch (error) {
-      throw new Error(`Error al restablecer contraseña: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-    }
-  }
 }

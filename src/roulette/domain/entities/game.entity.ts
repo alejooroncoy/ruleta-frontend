@@ -56,6 +56,24 @@ export class GameEntity {
   }
 
   /**
+   * Realiza una apuesta SIN actualizar el balance localmente
+   * (Para uso con API donde el backend maneja el balance)
+   */
+  placeBetWithoutBalanceUpdate(betType: BetType, betValue: string | number, betAmount: number): void {
+    if (!this.isGameActive) {
+      throw new Error('No hay una partida activa');
+    }
+
+    // NO validar ni restar el balance localmente - el backend lo maneja
+    this.currentBet = {
+      type: betType,
+      value: betValue,
+      amount: betAmount,
+      timestamp: new Date()
+    };
+  }
+
+  /**
    * Ejecuta el giro de la ruleta y calcula el resultado
    */
   spinRoulette(): BetResult {

@@ -31,8 +31,7 @@ export class AuthApiService extends HttpService {
    */
   public async signUp(userData: {
     name: string;
-    email: string;
-    password: string;
+    balance: number;
   }): Promise<{
     uid: string;
     name?: string;
@@ -51,7 +50,10 @@ export class AuthApiService extends HttpService {
         status?: string;
         createdAt: string;
         updatedAt: string;
-      }>('/api/v1/authentication/signup', userData);
+      }>('/api/v1/authentication/signup', {
+        name: userData.name,
+        initialBalance: userData.balance
+      });
       return response;
     } catch (error) {
       console.error('Error al registrar usuario:', error);
@@ -182,16 +184,12 @@ export class AuthApiService extends HttpService {
     updatedAt: string;
   }> {
     try {
-      const response = await this.put<{
-        uid: string;
-        name?: string;
-        balance: number;
-        role?: string;
-        status?: string;
-        createdAt: string;
-        updatedAt: string;
-      }>(`/api/v1/authentication/${uid}/balance`, { balance: newBalance });
-      return response;
+      // El endpoint devuelve 204 (No Content), así que necesitamos obtener el usuario actualizado
+      await this.put(`/api/v1/authentication/${uid}/balance`, { amount: newBalance });
+      
+      // Obtener el usuario actualizado después de la actualización
+      const updatedUser = await this.getUserByUid(uid);
+      return updatedUser;
     } catch (error) {
       console.error('Error al actualizar saldo:', error);
       throw new HttpError(

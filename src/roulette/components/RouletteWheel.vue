@@ -9,7 +9,10 @@
     <div 
       class="roulette-wheel" 
       ref="rouletteWheel" 
-      :class="{ 'roulette-wheel--spinning': isSpinning }"
+      :class="{ 
+        'roulette-wheel--spinning': isSpinning,
+        'roulette-wheel--winning': lastBetResult && !isSpinning
+      }"
     >
       <!-- Números de la ruleta -->
       <div class="roulette-numbers">
@@ -32,6 +35,7 @@
       <!-- Centro de la ruleta -->
       <div class="roulette-center">
         <div v-if="lastBetResult" class="roulette-result">
+          <div class="roulette-result__winner-badge">🏆</div>
           <div class="roulette-result__number roulette-result__number--3d">{{ lastBetResult.resultNumber }}</div>
           <div class="roulette-result__details">
             <span 
@@ -44,6 +48,7 @@
               {{ lastBetResult.isResultEven ? 'Par' : lastBetResult.isResultOdd ? 'Impar' : 'Cero' }}
             </span>
           </div>
+          <div class="roulette-result__celebration">🎉 ¡GANADOR! 🎉</div>
         </div>
         <div v-else class="roulette-waiting">
           <div class="roulette-waiting__icon">🎰</div>
@@ -51,10 +56,12 @@
       </div>
 
       <!-- Aviso del número ganador con efecto 3D -->
-      <div v-if="lastBetResult" class="winner-notification">
+      <div v-if="lastBetResult && lastBetResult.won" class="winner-notification">
         <div class="winner-notification__content">
+          <div class="winner-notification__trophy">🏆</div>
           <div class="winner-notification__number">{{ lastBetResult.resultNumber }}</div>
           <div class="winner-notification__text">¡GANADOR!</div>
+          <div class="winner-notification__celebration">🎉 ¡FELICIDADES! 🎉</div>
         </div>
       </div>
     </div>
@@ -62,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { BetResult } from '../domain/entities/roulette.entity';
 
 // Props
@@ -71,7 +78,7 @@ interface Props {
   lastBetResult?: BetResult | null;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 // Emits (definido pero no usado directamente en este componente)
 // const emit = defineEmits<{
@@ -121,6 +128,46 @@ const rouletteNumbers = [
   { value: 3, color: 'red' },
   { value: 26, color: 'black' }
 ];
+
+// Estado para la animación
+const isAnimating = ref(false);
+
+// Calculate the winning number position
+const getWinningNumberPosition = (winningNumber: number): number => {
+  const index = rouletteNumbers.findIndex(num => num.value === winningNumber);
+  if (index === -1) return 0;
+  
+  // Cada número está separado por 9.73 grados
+  // El indicador está en la parte superior (0 grados)
+  // Necesitamos que el número ganador quede en la parte superior
+  return index * 9.73;
+};
+
+// Calculate the final rotation so the winning number ends up at the top
+const finalRotation = computed(() => {
+  if (!props.lastBetResult?.resultNumber) return 0;
+  
+  const winningPosition = getWinningNumberPosition(props.lastBetResult.resultNumber);
+  // Rotar para que el número ganador quede en la parte superior (0 grados)
+  // Agregamos múltiples vueltas completas para el efecto de giro
+  const fullRotations = 5; // 5 vueltas completas
+  return (fullRotations * 360) - winningPosition;
+});
+
+// Aplicar la rotación final cuando se obtiene el resultado
+watch(() => props.lastBetResult, (newResult) => {
+  if (newResult && newResult.resultNumber && rouletteWheel.value) {
+    isAnimating.value = true;
+    
+    // Aplicar la rotación final
+    rouletteWheel.value.style.transform = `rotate(${finalRotation.value}deg)`;
+    
+    // Después de la animación, mostrar el resultado
+    setTimeout(() => {
+      isAnimating.value = false;
+    }, 4000); // Duración de la animación
+  }
+}, { immediate: true });
 
 // Métodos
 const getColorName = (color: string) => {
@@ -214,14 +261,23 @@ const getColorName = (color: string) => {
   );
   position: relative;
   box-shadow: 
-    0 0 20px rgba(0, 0, 0, 0.3),
-    inset 0 0 10px rgba(255, 255, 255, 0.1);
-  border: 3px solid #ffd700;
+    0 0 30px rgba(255, 215, 0, 0.7),
+    inset 0 0 20px rgba(255, 255, 255, 0.2),
+    0 10px 30px rgba(0, 0, 0, 0.3);
+  border: 4px solid #ffd700;
   transition: transform 4s ease-out;
+  transform-style: preserve-3d;
+  perspective: 1000px;
 }
 
 .roulette-wheel--spinning {
-  animation: spin 4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation: spin3d 4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transform-style: preserve-3d;
+}
+
+.roulette-wheel--winning {
+  animation: winnerPulse 2s ease-in-out infinite;
+  transform-style: preserve-3d;
 }
 
 /* Números de la ruleta */
@@ -261,6 +317,10 @@ const getColorName = (color: string) => {
   justify-content: center;
   position: relative;
   top: -2.6rem;
+  transform-style: preserve-3d;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
 }
 
 .roulette-number__text--red {
@@ -323,7 +383,22 @@ const getColorName = (color: string) => {
 
 .roulette-result__number--3d {
   transform: translateZ(20px);
-  animation: numberGlow 2s ease-in-out infinite alternate;
+  animation: numberGlow 2s ease-in-out infinite alternate, winnerGlow 2s ease-in-out infinite;
+}
+
+.roulette-result__winner-badge {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  animation: bounce 1s ease-in-out infinite;
+}
+
+.roulette-result__celebration {
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  margin-top: 0.5rem;
+  animation: celebrationPulse 1.5s ease-in-out infinite;
 }
 
 .roulette-result__details {
@@ -432,6 +507,21 @@ const getColorName = (color: string) => {
   animation: textPulse 1.5s ease-in-out infinite alternate;
 }
 
+.winner-notification__trophy {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  animation: bounce 1s ease-in-out infinite;
+}
+
+.winner-notification__celebration {
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  margin-top: 0.5rem;
+  animation: celebrationPulse 1.5s ease-in-out infinite;
+}
+
 /* Animaciones */
 @keyframes spin {
   0% {
@@ -442,6 +532,24 @@ const getColorName = (color: string) => {
   }
   100% {
     transform: rotate(2160deg);
+  }
+}
+
+@keyframes spin3d {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
+  }
+  25% {
+    transform: rotateX(15deg) rotateY(45deg) rotateZ(450deg) scale(1.05);
+  }
+  50% {
+    transform: rotateX(0deg) rotateY(90deg) rotateZ(900deg) scale(1.1);
+  }
+  75% {
+    transform: rotateX(-15deg) rotateY(135deg) rotateZ(1350deg) scale(1.05);
+  }
+  100% {
+    transform: rotateX(0deg) rotateY(180deg) rotateZ(2160deg) scale(1);
   }
 }
 
@@ -506,6 +614,49 @@ const getColorName = (color: string) => {
   100% {
     transform: translateZ(20px) scale(1.05);
     opacity: 1;
+  }
+}
+
+@keyframes winnerGlow {
+  0%, 100% {
+    box-shadow: 
+      0 0 20px rgba(255, 215, 0, 0.8),
+      0 0 40px rgba(255, 215, 0, 0.6),
+      0 0 60px rgba(255, 215, 0, 0.4);
+  }
+  50% {
+    box-shadow: 
+      0 0 30px rgba(255, 215, 0, 1),
+      0 0 60px rgba(255, 215, 0, 0.8),
+      0 0 90px rgba(255, 215, 0, 0.6);
+  }
+}
+
+@keyframes winnerPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 30px rgba(255, 215, 0, 0.7),
+      inset 0 0 20px rgba(255, 255, 255, 0.2),
+      0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 
+      0 0 50px rgba(255, 215, 0, 1),
+      inset 0 0 30px rgba(255, 255, 255, 0.4),
+      0 15px 40px rgba(0, 0, 0, 0.4);
+  }
+}
+
+@keyframes celebrationPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
   }
 }
 

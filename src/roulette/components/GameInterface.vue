@@ -10,6 +10,7 @@
       @save-game="handleSaveGame"
       @new-game="handleNewGame"
       @switch-player="handleSwitchPlayer"
+      @sync-balance="handleSyncBalance"
     />
 
     <!-- Área principal del juego -->
@@ -81,6 +82,7 @@ const {
   spinRoulette, 
   saveGame, 
   startNewGame, 
+  syncBalance,
   isSpinning,
   canPlaceBet,
   canSpin,
@@ -118,6 +120,10 @@ const handleNewGame = () => {
 
 const handleSwitchPlayer = () => {
   showPlayerSetupModal.value = true;
+};
+
+const handleSyncBalance = () => {
+  syncBalance();
 };
 
 const closePlayerSetupModal = () => {

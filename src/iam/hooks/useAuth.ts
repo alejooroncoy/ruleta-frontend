@@ -24,12 +24,12 @@ export function useAuth() {
   /**
    * Registra un nuevo usuario
    */
-  const register = async (email: string, password: string, username: string) => {
+  const register = async (name: string, balance: number) => {
     try {
       isLoading.value = true;
       error.value = null;
 
-      const { user, session } = await authUseCase.register(email, password, username);
+      const { user, session } = await authUseCase.register(name, balance);
       
       currentUser.value = user;
       currentSession.value = session;
@@ -44,12 +44,12 @@ export function useAuth() {
   /**
    * Autentica un usuario
    */
-  const login = async (email: string, password: string) => {
+  const login = async (name: string) => {
     try {
       isLoading.value = true;
       error.value = null;
 
-      const { user, session } = await authUseCase.login(email, password);
+      const { user, session } = await authUseCase.login(name);
       
       currentUser.value = user;
       currentSession.value = session;

@@ -29,11 +29,27 @@
       >
         🔄 Cambiar Jugador
       </button>
+        <button 
+          @click="testToast" 
+          class="btn btn--primary btn--small"
+          title="Probar toasts"
+        >
+          🍞 Test Toast
+        </button>
+        <button 
+          @click="$emit('sync-balance')" 
+          class="btn btn--secondary btn--small"
+          title="Sincronizar balance con el backend"
+        >
+          🔄 Sync Balance
+        </button>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
+import { useToast } from '../../shared/composables/useToast';
+
 // Props
 interface Props {
   playerName: string;
@@ -50,7 +66,38 @@ defineEmits<{
   'save-game': [];
   'new-game': [];
   'switch-player': [];
+  'sync-balance': [];
 }>();
+
+// Toast service
+const { success, error, warning, info } = useToast();
+
+// Método para probar toasts
+const testToast = () => {
+  const messages = [
+    { type: 'success', message: '¡Operación exitosa!', title: 'Éxito' },
+    { type: 'error', message: 'Algo salió mal', title: 'Error' },
+    { type: 'warning', message: 'Ten cuidado con esto', title: 'Advertencia' },
+    { type: 'info', message: 'Información importante', title: 'Información' }
+  ];
+  
+  const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+  
+  switch (randomMessage.type) {
+    case 'success':
+      success(randomMessage.message, { title: randomMessage.title });
+      break;
+    case 'error':
+      error(randomMessage.message, { title: randomMessage.title });
+      break;
+    case 'warning':
+      warning(randomMessage.message, { title: randomMessage.title });
+      break;
+    case 'info':
+      info(randomMessage.message, { title: randomMessage.title });
+      break;
+  }
+};
 </script>
 
 <style scoped>

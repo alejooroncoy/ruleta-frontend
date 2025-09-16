@@ -82,15 +82,22 @@ export class GameUseCase {
       game.addBet(bet);
       
       // Marcar que hay una apuesta pendiente para habilitar el botón de girar
-      // (esto también actualiza el saldo del jugador)
-      game.placeBet(betType, betValue, betAmount);
+      // NO restar el monto localmente - el backend maneja el balance
+      game.placeBetWithoutBalanceUpdate(betType, betValue, betAmount);
       
-      // Actualizar el balance en el backend
+      // Sincronizar el balance desde el backend después de la apuesta
       if (game.player.uid) {
         try {
-          await this.updateUserBalanceViaApi(game.player.uid, game.player.balance);
+          // Obtener el balance actualizado del backend
+          const backendUser = await this.getUserBalanceFromApi(game.player.uid);
+          
+          // Usar el balance del backend como fuente de verdad
+          game.player.updateBalance(backendUser.balance);
+          this.forceBalanceUpdate(backendUser.balance);
+          
+          console.log(`Balance sincronizado desde backend después de apuesta: ${backendUser.balance}`);
         } catch (error) {
-          console.warn('Error updating balance in backend after bet:', error);
+          console.warn('Error obteniendo balance del backend después de apuesta:', error);
         }
       }
       
@@ -122,8 +129,6 @@ export class GameUseCase {
       game.updateFromApiData(result);
       
       if (result.isCompleted && result.winningNumber !== undefined) {
-        this.notificationService.showSuccess(`¡Resultado: ${result.winningNumber} (${result.winningColor})!`);
-        
         // Calculate winnings and update player balance
         await this.calculateAndUpdateWinnings(game);
         
@@ -131,13 +136,13 @@ export class GameUseCase {
         game.endGame();
         game.startGame(); // Reiniciar para permitir nuevas apuestas
       } else {
-        this.notificationService.showInfo('Ruleta girando...');
+        this.notificationService.showInfo('🎰 Ruleta girando... ¡Buena suerte!');
       }
       
       return result;
     } catch (error) {
       const errorMessage = (error as Error).message;
-      this.notificationService.showError(errorMessage);
+      this.notificationService.showError(`Error al girar la ruleta: ${errorMessage}`);
       throw error;
     }
   }
@@ -148,10 +153,11 @@ export class GameUseCase {
   async savePlayer(player: PlayerEntity): Promise<void> {
     try {
       await this.saveGameViaApi(player);
-      this.notificationService.showSuccess('¡Partida guardada exitosamente!');
+      // No mostrar notificación aquí para evitar duplicados
+      // La notificación se maneja en saveGameViaApi
     } catch (error) {
       const errorMessage = (error as Error).message;
-      this.notificationService.showError(errorMessage);
+      this.notificationService.showError(`Error al guardar jugador: ${errorMessage}`);
       throw error;
     }
   }
@@ -206,9 +212,23 @@ export class GameUseCase {
         throw new Error(`No se encontró el jugador ${name}`);
       }
       
+      // Sincronizar el balance desde el backend para asegurar consistencia
+      if (player.uid) {
+        try {
+          const backendUser = await this.getUserBalanceFromApi(player.uid);
+          if (backendUser.balance !== player.balance) {
+            console.warn(`Balance desincronizado al cargar jugador: Frontend=${player.balance}, Backend=${backendUser.balance}`);
+            // Usar el balance del backend como fuente de verdad
+            player.updateBalance(backendUser.balance);
+          }
+        } catch (error) {
+          console.warn('Error al sincronizar balance al cargar jugador:', error);
+        }
+      }
+      
       const game = this.gameService.startNewGame(player);
       
-      this.notificationService.showSuccess(`¡Bienvenido de nuevo ${name}! Tu saldo actual es $${player.balance}`);
+      this.notificationService.showSuccess(`🔄 ¡Bienvenido de nuevo ${name}! Tu saldo actual es $${player.balance}`);
       
       return { player, game };
     } catch (error) {
@@ -258,7 +278,12 @@ export class GameUseCase {
           break;
         case 'color':
           betData.betType = 'COLOR';
-          betData.color = String(betValue);
+          // Mapear colores de inglés a español para el backend
+          const colorMapping: { [key: string]: string } = {
+            'red': 'ROJO',
+            'black': 'NEGRO'
+          };
+          betData.color = colorMapping[String(betValue)] || String(betValue);
           break;
         case 'even_odd':
           betData.betType = 'PAR_IMPAR';
@@ -292,16 +317,13 @@ export class GameUseCase {
     try {
       const result = await this.rouletteApiService.spinRoulette(gameId);
       
-      if (result.isCompleted && result.winningNumber !== undefined) {
-        this.notificationService.showSuccess(`¡Resultado: ${result.winningNumber} (${result.winningColor})!`);
-      } else {
-        this.notificationService.showInfo('Ruleta girando...');
-      }
+      // No mostrar notificaciones aquí para evitar duplicados
+      // Las notificaciones se manejan en el método principal spinRoulette
       
       return result;
     } catch (error) {
       const errorMessage = (error as Error).message;
-      this.notificationService.showError(errorMessage);
+      this.notificationService.showError(`Error en la API de la ruleta: ${errorMessage}`);
       throw error;
     }
   }
@@ -316,10 +338,10 @@ export class GameUseCase {
       const { authApiService } = await import('../../iam/infrastructure/services/auth-api.service');
       await authApiService.updateUserBalance(player.uid, player.balance);
       
-      this.notificationService.showSuccess('¡Partida guardada exitosamente!');
+      this.notificationService.showSuccess(`💾 Partida guardada exitosamente. Saldo actual: $${player.balance}`);
     } catch (error) {
       const errorMessage = (error as Error).message;
-      this.notificationService.showError(errorMessage);
+      this.notificationService.showError(`Error al guardar partida: ${errorMessage}`);
       throw error;
     }
   }
@@ -376,10 +398,9 @@ export class GameUseCase {
       const { authApiService } = await import('../../iam/infrastructure/services/auth-api.service');
       const response = await authApiService.signUp({
         name: userData.name,
-        email: userData.name, // Usar name como email para compatibilidad
-        password: 'dummy' // Dummy password since real backend doesn't require it
+        balance: userData.balance
       });
-      this.notificationService.showSuccess(`¡Usuario ${userData.name} registrado exitosamente!`);
+      this.notificationService.showSuccess(`👤 Usuario ${userData.name} registrado exitosamente con saldo inicial de $${userData.balance}`);
       return response;
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -406,7 +427,7 @@ export class GameUseCase {
       // Temporal: usar authApiService directamente hasta implementar en AuthService
       const { authApiService } = await import('../../iam/infrastructure/services/auth-api.service');
       const response = await authApiService.signIn({ name });
-      this.notificationService.showSuccess(`¡Bienvenido ${response.name}!`);
+      this.notificationService.showSuccess(`👋 ¡Bienvenido ${response.name}! Tu saldo actual es $${response.balance}`);
       return response;
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -444,6 +465,30 @@ export class GameUseCase {
   }
 
   /**
+   * Obtiene el saldo actual de un usuario desde el backend
+   */
+  async getUserBalanceFromApi(uid: string): Promise<{
+    uid: string;
+    name?: string;
+    balance: number;
+    role?: string;
+    status?: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    try {
+      const { authApiService } = await import('../../iam/infrastructure/services/auth-api.service');
+      const response = await authApiService.getUserByUid(uid);
+      console.log('Balance obtenido del backend:', response.balance);
+      return response;
+    } catch (error) {
+      const errorMessage = (error as Error).message;
+      this.notificationService.showError(`Error al obtener balance: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  /**
    * Actualiza el saldo de un usuario
    * TODO: Implementar a través del AuthService inyectado
    */
@@ -460,7 +505,7 @@ export class GameUseCase {
       // Temporal: usar authApiService directamente hasta implementar en AuthService
       const { authApiService } = await import('../../iam/infrastructure/services/auth-api.service');
       const response = await authApiService.updateUserBalance(uid, newBalance);
-      this.notificationService.showSuccess(`Saldo actualizado: $${newBalance}`);
+      console.log('Balance actualizado en backend:', response.balance);
       return response;
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -478,7 +523,7 @@ export class GameUseCase {
       // Temporal: usar authApiService directamente hasta implementar en AuthService
       const { authApiService } = await import('../../iam/infrastructure/services/auth-api.service');
       await authApiService.logout();
-      this.notificationService.showInfo('Sesión cerrada');
+      this.notificationService.showInfo('👋 Sesión cerrada exitosamente');
     } catch (error) {
       const errorMessage = (error as Error).message;
       this.notificationService.showError(errorMessage);
@@ -487,6 +532,36 @@ export class GameUseCase {
   }
 
   // ===== MÉTODOS DE UTILIDAD =====
+
+  /**
+   * Sincroniza el balance del jugador con el backend
+   */
+  async syncPlayerBalanceWithBackend(player: PlayerEntity): Promise<number> {
+    if (!player.uid) {
+      throw new Error('El jugador no tiene UID para sincronizar con el backend');
+    }
+    
+    try {
+      const backendUser = await this.getUserBalanceFromApi(player.uid);
+      if (backendUser.balance !== player.balance) {
+        console.log(`Sincronizando balance: Frontend=${player.balance} -> Backend=${backendUser.balance}`);
+        player.updateBalance(backendUser.balance);
+        this.forceBalanceUpdate(backendUser.balance);
+      }
+      return backendUser.balance;
+    } catch (error) {
+      console.error('Error al sincronizar balance con backend:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fuerza la actualización del balance en el store
+   */
+  private forceBalanceUpdate(newBalance: number): void {
+    // Este método será llamado desde useGameFlow para actualizar el store
+    console.log('Balance actualizado en GameUseCase:', newBalance);
+  }
 
   /**
    * Cambia a un jugador diferente
@@ -563,7 +638,7 @@ export class GameUseCase {
   }> {
     try {
       const winnings = await this.rouletteApiService.calculateWinnings(gameId);
-      this.notificationService.showInfo(`Ganancias calculadas: $${winnings.totalWinnings}`);
+      this.notificationService.showInfo(`📊 Ganancias calculadas: $${winnings.totalWinnings} (${winnings.winningBets}/${winnings.totalBetsCount} apuestas ganadoras)`);
       return winnings;
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -590,22 +665,36 @@ export class GameUseCase {
         existingBets.push(updatedBet);
       });
 
-      // Calculate total winnings
+      // Calcular ganancias totales
       const totalWinnings = existingBets.reduce((sum, bet) => sum + (bet.winningsAmount || 0), 0);
+      const totalBets = existingBets.reduce((sum, bet) => sum + bet.amount, 0);
+      const netProfit = totalWinnings - totalBets;
       
-      if (totalWinnings > 0) {
-        // Actualizar el saldo del jugador
-        game.player.addWinnings(totalWinnings);
-        this.notificationService.showSuccess(`¡Ganaste $${totalWinnings} en total!`);
-      }
-      
-      // Actualizar el balance en el backend y en el store
+      // Sincronizar el balance desde el backend después de calcular ganancias
       if (game.player.uid) {
         try {
-          await this.updateUserBalanceViaApi(game.player.uid, game.player.balance);
+          // Obtener el balance actualizado del backend
+          const backendUser = await this.getUserBalanceFromApi(game.player.uid);
+          
+          // Usar el balance del backend como fuente de verdad
+          game.player.updateBalance(backendUser.balance);
+          this.forceBalanceUpdate(backendUser.balance);
+          
+          console.log(`Balance sincronizado desde backend después de ganancias: ${backendUser.balance}`);
         } catch (error) {
-          console.warn('Error updating balance in backend:', error);
+          console.warn('Error obteniendo balance del backend después de ganancias:', error);
         }
+      }
+      
+      // Mostrar notificación descriptiva del resultado
+      if (totalWinnings > 0) {
+        if (netProfit > 0) {
+          this.notificationService.showSuccess(`🎉 ¡Felicitaciones! Ganaste $${totalWinnings} (ganancia neta: $${netProfit})`);
+        } else {
+          this.notificationService.showInfo(`💰 Recuperaste $${totalWinnings} de tu apuesta de $${totalBets}`);
+        }
+      } else if (totalBets > 0) {
+        this.notificationService.showWarning(`😔 No ganaste esta vez. Perdiste $${totalBets}`);
       }
     } catch (error) {
       console.error('Error calculating winnings:', error);

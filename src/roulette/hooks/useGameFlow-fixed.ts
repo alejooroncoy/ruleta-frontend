@@ -93,6 +93,14 @@ export function useGameFlow() {
 
       await gameUseCase.placeBet(store.currentGame as GameEntity, betType, betValue, betAmount);
       
+      // Actualizar el balance en el store después de la apuesta
+      // Usar el balance del GameEntity que ya fue actualizado por el GameUseCase
+      if (store.currentGame && store.currentGame.player) {
+        const updatedBalance = store.currentGame.player.balance;
+        console.log('Actualizando balance después de apuesta:', updatedBalance);
+        store.forceUpdatePlayerBalance(updatedBalance);
+      }
+      
       // Actualizar el estado del store
       if (store.currentGame) {
         store.setCurrentGame(store.currentGame);
@@ -123,6 +131,14 @@ export function useGameFlow() {
 
       const result = await gameUseCase.spinRoulette(store.currentGame as GameEntity);
       
+      // Actualizar el balance en el store después del giro
+      // Usar el balance del GameEntity que ya fue actualizado por el GameUseCase
+      if (store.currentGame && store.currentGame.player) {
+        const updatedBalance = store.currentGame.player.balance;
+        console.log('Actualizando balance después del giro:', updatedBalance);
+        store.forceUpdatePlayerBalance(updatedBalance);
+      }
+      
       // Actualizar el estado del store con el resultado
       if (store.currentGame) {
         store.setCurrentGame(store.currentGame);
@@ -133,13 +149,22 @@ export function useGameFlow() {
       
       // Crear un resultado de apuesta para compatibilidad con el store
       if (result.isCompleted && result.winningNumber !== undefined) {
+        // Mapear colores del español (backend) al inglés (frontend)
+        const colorMapping: { [key: string]: string } = {
+          'ROJO': 'red',
+          'NEGRO': 'black',
+          'VERDE': 'green'
+        };
+        
+        const mappedColor = colorMapping[result.winningColor || ''] || 'green';
+        
         const betResult = {
           won: false, // Se calculará basado en las apuestas
           winnings: 0, // Se calculará basado en las apuestas
           profit: 0, // Se calculará basado en las apuestas
           multiplier: 0, // Se calculará basado en las apuestas
           resultNumber: result.winningNumber,
-          resultColor: (result.winningColor as 'red' | 'black' | 'green') || 'green',
+          resultColor: (mappedColor as 'red' | 'black' | 'green'),
           isResultEven: result.winningNumber % 2 === 0,
           isResultOdd: result.winningNumber % 2 === 1
         };

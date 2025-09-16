@@ -9,12 +9,12 @@ export interface AuthService {
   /**
    * Registra un nuevo usuario
    */
-  register(credentials: CredentialsEntity, username: string): Promise<UserEntity>;
+  register(name: string, balance: number): Promise<UserEntity>;
 
   /**
    * Autentica un usuario con credenciales
    */
-  login(credentials: CredentialsEntity): Promise<AuthSessionEntity>;
+  login(name: string): Promise<{ user: UserEntity; session: AuthSessionEntity }>;
 
   /**
    * Cierra la sesión de un usuario
@@ -31,18 +31,4 @@ export interface AuthService {
    */
   validateToken(token: string): Promise<UserEntity | null>;
 
-  /**
-   * Cambia la contraseña de un usuario
-   */
-  changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void>;
-
-  /**
-   * Solicita restablecimiento de contraseña
-   */
-  requestPasswordReset(email: string): Promise<void>;
-
-  /**
-   * Restablece la contraseña con un token
-   */
-  resetPassword(token: string, newPassword: string): Promise<void>;
 }

@@ -143,14 +143,45 @@ export const useRouletteStore = defineStore('roulette', () => {
    * Actualiza el saldo del usuario autenticado
    */
   const updateUserBalance = (newBalance: number) => {
+    console.log('updateUserBalance llamado con:', newBalance);
     if (currentUser.value) {
       currentUser.value.balance = newBalance;
       authSessionService.updateUserBalance(newBalance);
       
-      // Actualizar también el PlayerEntity
+      // Actualizar también el PlayerEntity y forzar reactividad
       if (currentPlayer.value) {
         currentPlayer.value.updateBalance(newBalance);
+        // Forzar la reactividad creando una nueva instancia del PlayerEntity
+        const updatedPlayer = new PlayerEntity(
+          currentPlayer.value.name,
+          newBalance,
+          currentPlayer.value.uid
+        );
+        currentPlayer.value = updatedPlayer;
+        console.log('PlayerEntity actualizado con balance:', updatedPlayer.balance);
       }
+    }
+  };
+
+  /**
+   * Fuerza la actualización del balance del jugador actual
+   */
+  const forceUpdatePlayerBalance = (newBalance: number) => {
+    console.log('forceUpdatePlayerBalance llamado con:', newBalance);
+    if (currentPlayer.value) {
+      const updatedPlayer = new PlayerEntity(
+        currentPlayer.value.name,
+        newBalance,
+        currentPlayer.value.uid
+      );
+      currentPlayer.value = updatedPlayer;
+      
+      // También actualizar currentUser si existe
+      if (currentUser.value) {
+        currentUser.value.balance = newBalance;
+        authSessionService.updateUserBalance(newBalance);
+      }
+      console.log('Balance forzado a actualizar:', newBalance);
     }
   };
 
@@ -227,6 +258,7 @@ export const useRouletteStore = defineStore('roulette', () => {
     initializeAuth,
     setAuthSession,
     updateUserBalance,
+    forceUpdatePlayerBalance,
     clearAuthSession,
     checkAuthStatus
   };

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import RouletteGame from './roulette/views/RouletteGame.vue';
+import ToastContainer from './shared/components/ToastContainer.vue';
 </script>
 
 <template>
   <RouletteGame />
+  <ToastContainer position="top-right" :max-toasts="5" />
 </template>
 
 <style>
