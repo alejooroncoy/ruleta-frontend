@@ -1,0 +1,4 @@
+/* Importar sistema de diseño con BEM CSS y Mobile First */
+@import './styles/variables.css';
+@import './styles/base.css';
+@import './styles/components.css';

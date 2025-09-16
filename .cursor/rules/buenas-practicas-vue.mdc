@@ -1,0 +1,106 @@
+---
+description: Buenas prácticas de arquitectura, organización y componentes para el proyecto de Ruleta en Vue
+globs:
+  - "frontend/**/*.vue"
+  - "frontend/**/*.ts"
+  - "frontend/**/*.js"
+alwaysApply: true
+---
+
+# Organización de componentes
+
+- Todos los componentes deben hacer **una sola responsabilidad**. Si un componente crece mucho, dividirlo en componentes más pequeños.
+- Seguir convención de nombres:  
+  - Componentes: `PascalCase.vue`  
+  - Archivos de servicios / lógica: `camelCase.js/.ts`
+- Mantener una estructura de carpetas clara, por ejemplo:
+
+  ```
+  src/
+    (bounded-context)/
+      views/
+      components/
+      application/ # Composables generales o flujos no ligados a un dominio
+        - <name>.usecase.ts
+      domain/ # Tipos, utilidades y entidades compartidas
+        - entities/ <entity_name>.entity.ts
+        - valueobjets/ <entity_name>.valueobject.ts
+        - repositories/ <repository_name>.repository.ts
+        - services/ <servicie_name>.service.ts
+      infrastructure/  # Servicios UI-related (por ejemplo, persistencia local, notificaciones) concretaciones de domain
+        - repositories/ <repository_name>.repository.ts
+        - services/ <servicie_name>.service.ts
+      interfaces/
+        - top-headliness (interfaces que viene de api)
+        - assemblers (utilizar patron assembler)
+  ```
+
+- Utilizar shared Lógica compartida entre dominios (DDD).
+- Recuerda los principios de DDD estricto, salvo en un bounded context pbulic, que tendra componentes o pages que no tengan relacion estricta con un boudnde context, puede utilizar componentes de otros bounded contexts sin problema.
+
+# Manejo del estado & comunicación entre componentes
+
+- Usar un store global (Pinia) para manejar estado compartido: saldo del usuario, apuesta actual, resultado de la ruleta, nombre de usuario, etc.
+- Evitar **prop drilling**. Cuando un componente necesita datos de muchos niveles arriba, usar:
+  - store para datos globales
+  - provide/inject para datos que no son globales pero se comparten entre descendientes
+  - eventos personalizados o un pequeño event bus si tiene sentido, pero solo cuando sea apropiado
+
+# Arquitectura y lógica de negocio
+
+- Separar claramente la lógica de negocio de la UI. Ejemplo: las reglas de apostado (qué sucede si se apuesta a color vs número vs par/impar) deben estar en servicios o clases, no mezclado en componentes con template/render.
+- Tener una capa “servicios / API” que encapsule llamadas HTTP: por ejemplo `rouletteService.getResult()`, `userService.updateBalance(...)`.
+- Validaciones de inputs (por ejemplo monto de apuesta, nombre de usuario) hechas tanto en frontend como backend, pero en frontend usar esquemas o funciones utilitarias para evitar validaciones duplicadas.
+
+# Estructura de la API y persistencia
+
+- Cuando guardes el estado del usuario (“guardar partida”), usar persistencia local (por ejemplo `localStorage`) manejada por un servicio (e.g. `storageService`) para desacoplar de la UI.
+- Todas las llamadas al backend deben manejar errores: mostrar al usuario feedback si la petición falla, y evitar que la app quede en estado inconsistente.
+
+# Código limpio, mantenibilidad y escalabilidad
+
+- Escribir código legible: nombres claros, funciones cortas, evitar funciones muy anidadas o lógica compleja dentro de métodos `mounted` o handlers de eventos; extraer a funciones utilitarias si es mucho código.
+- Agregar comentarios cuando una lógica es no trivial: especialmente reglas del juego, casos borde (qué pasa si se apuesta más del saldo, si nombre no existe, etc.)
+- Escribir tests unitarios para la lógica del juego (por ejemplo función que toma apuesta + resultado + tipo de apuesta + saldo → devuelve monto ganado/perdido). No es obligatorio pero demuestra profesionalismo.
+
+# Buenas prácticas de Cursor Rules
+
+- Mantener esta regla por debajo de ~500 líneas. Si ves que crece mucho, separar en reglas más específicas, por ejemplo: “vue-store-rules”, “vue-services-rules”, etc.
+- Proporcionar ejemplos claros cuando menciones algo que puede tener múltiples implementaciones posibles.
+
+# Arquitectura recomendada
+
+Este proyecto sigue una arquitectura **Clean Architecture simplificada** con inspiración en **DDD (Domain-Driven Design)** para garantizar escalabilidad y mantenibilidad.
+
+Para DDD, sigue el patron, independencia entre bounded context y comunicacion de event bus.
+
+## Capas principales
+
+### 1. Presentación (UI)
+- Componentes de Vue y vistas
+- Comunicación mínima con la lógica, usando props/emit o store
+- Usa composables para lógica compartida
+- No debe contener reglas del juego
+
+### 2. Aplicación (Controladores / Flujos)
+- Composables o servicios encargados del flujo general del juego (ej: `useGameFlow.ts`)
+- Orquesta las llamadas a servicios y actualiza el estado
+- Ideal para manejar side effects como llamadas a la API
+
+### 3. Dominio (Lógica de negocio)
+- Aquí viven las reglas del juego de la ruleta: cálculo de ganancia, validación de apuestas, etc.
+- Código 100% testeable sin depender de la UI ni del backend
+
+### 4. Infraestructura
+- Implementaciones concretas de servicios (API, persistencia local, etc.)
+- Por ejemplo: `rouletteApi.ts`, `localStorageService.ts`, etc.
+- Estos servicios pueden ser usados por la capa de Aplicación
+
+## Ventajas
+
+- Fácil de testear: lógica desacoplada
+- Escalable: nuevas reglas de juego o modos se integran sin romper la UI
+- Mantenible: cada capa tiene una responsabilidad única
+- Profesional: refleja buenas prácticas usadas en empresas reales
+
+En la parte de css en el diseño utiliza BEM CSS y mobile first
